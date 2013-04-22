@@ -36,10 +36,13 @@
 
 TARGET = $(notdir $(CURDIR))
 INSTALL_DIR = /home/dwilkins/.avr
-PORT = /dev/ttyACM0
-UPLOAD_RATE = 115200
-AVRDUDE_PROGRAMMER = stk500v2
-MCU = atmega2560
+#PORT = /dev/ttyACM0
+#UPLOAD_RATE = 115200
+#AVRDUDE_PROGRAMMER = stk500v2
+PORT = /dev/ttyUSB0
+UPLOAD_RATE = 57600
+AVRDUDE_PROGRAMMER = arduino
+MCU = atmega1280
 F_CPU = 16000000
 
 ############################################################################
@@ -52,8 +55,8 @@ AVRDUDE_PATH = /usr/bin
 SRC =  $(ARDUINO)/wiring.c \
 $(ARDUINO)/wiring_analog.c $(ARDUINO)/wiring_digital.c \
 $(ARDUINO)/wiring_pulse.c \
-$(ARDUINO)/wiring_shift.c $(ARDUINO)/WInterrupts.c
-CXXSRC = $(ARDUINO)/HardwareSerial.cpp $(ARDUINO)/WMath.cpp $(ARDUINO)/WString.cpp $(ARDUINO)/Print.cpp
+$(ARDUINO)/wiring_shift.c $(ARDUINO)/WInterrupts.c utility/stringbuffer.c
+CXXSRC = $(ARDUINO)/HardwareSerial.cpp $(ARDUINO)/WMath.cpp $(ARDUINO)/WString.cpp $(ARDUINO)/Print.cpp  $(ARDUINO)/IPAddress.cpp CrawlerCommand.cpp aJSON.cpp main.cpp
 FORMAT = ihex
 
 #$(ARDUINO)/wiring_pulse.c $(ARDUINO)/wiring_serial.c \
@@ -91,8 +94,6 @@ CFLAGS = $(CDEBUG) $(CDEFS) $(CINCS) -O$(OPT) $(CWARN) $(CSTANDARD) $(CEXTRA)
 CXXFLAGS = $(CDEFS) $(CINCS) -O$(OPT)
 #ASFLAGS = -Wa,-adhlns=$(<:.S=.lst),-gstabs
 LDFLAGS = -lm
-
-CPP_SOURCE = main.cpp CrawlerCommand.cpp
 
 # Programming support using avrdude Settings and variables.
 # [pid  7944] execve("/usr/bin/avrdude", ["/usr/bin/avrdude", "-C/etc/avrdude/avrdude.conf", "-q", "-q", "-patmega2560", "-cstk500v2", "-P/dev/ttyACM0", "-b115200", "-D", "-Uflash:w:/tmp/build124851010235"...], [/* 49 vars */] <unfinished ...>
@@ -153,7 +154,8 @@ sym: applet/$(TARGET).sym
 upload: applet/$(TARGET).hex
 #	stty $(UPLOAD_RATE) -F $(PORT) raw ignbrk hupcl
 	$(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH)
-	(stty 115200 raw ; cat -) < $(PORT)
+	minicom
+#	(stty 115200 raw ; cat -) < $(PORT)
 
 
 # Display size of file.
@@ -200,8 +202,8 @@ extcoff: $(TARGET).elf
 	$(NM) -n $< > $@
 
 # Link: create ELF output file from library.
-applet/$(TARGET).elf: $(CPP_SOURCE) applet/core.a
-	$(CC) $(ALL_CFLAGS) -o $@ $(CPP_SOURCE) -L. applet/core.a $(LDFLAGS)
+applet/$(TARGET).elf: $(CXXSRC) applet/core.a
+	$(CC) $(ALL_CFLAGS) -o $@ $(CXXSRC) -L. applet/core.a $(LDFLAGS)
 
 applet/core.a: $(OBJ)
 	@for i in $(OBJ); do echo $(AR) rcs applet/core.a $$i; $(AR) rcs applet/core.a $$i; done
@@ -246,181 +248,164 @@ depend:
 
 .PHONY:	all build elf hex eep lss sym program coff extcoff clean depend sizebefore sizeafter
 # DO NOT DELETE THIS LINE -- make depend depends on it.
-pins_arduino.o: \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/pins_arduino.c \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/io.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/sfr_defs.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/inttypes.h \
- /usr/lib/gcc/avr/4.6.2/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iom1280.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iomxx0_1.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/portpins.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/common.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/version.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/fuse.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/lock.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring_private.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/interrupt.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay_basic.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdio.h \
- /usr/lib/gcc/avr/4.6.2/include/stdarg.h \
- /usr/lib/gcc/avr/4.6.2/include/stddef.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdlib.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/binary.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/pins_arduino.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/pgmspace.h
 wiring.o: \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring.c \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring_private.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/io.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/sfr_defs.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/inttypes.h \
- /usr/lib/gcc/avr/4.6.2/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iom1280.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iomxx0_1.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/portpins.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/common.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/version.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/fuse.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/lock.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/interrupt.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay_basic.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdio.h \
- /usr/lib/gcc/avr/4.6.2/include/stdarg.h \
- /usr/lib/gcc/avr/4.6.2/include/stddef.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdlib.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/binary.h
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/wiring.c \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/wiring_private.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/io.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/sfr_defs.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/inttypes.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iom1280.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iomxx0_1.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/portpins.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/common.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/version.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/fuse.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/lock.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/interrupt.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdio.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdarg.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stddef.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/Arduino.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdlib.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/string.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/math.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/pgmspace.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/binary.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/variants/mega/pins_arduino.h
 wiring_analog.o: \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring_analog.c \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring_private.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/io.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/sfr_defs.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/inttypes.h \
- /usr/lib/gcc/avr/4.6.2/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iom1280.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iomxx0_1.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/portpins.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/common.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/version.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/fuse.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/lock.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/interrupt.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay_basic.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdio.h \
- /usr/lib/gcc/avr/4.6.2/include/stdarg.h \
- /usr/lib/gcc/avr/4.6.2/include/stddef.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdlib.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/binary.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/pins_arduino.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/pgmspace.h
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/wiring_analog.c \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/wiring_private.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/io.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/sfr_defs.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/inttypes.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iom1280.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iomxx0_1.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/portpins.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/common.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/version.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/fuse.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/lock.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/interrupt.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdio.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdarg.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stddef.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/Arduino.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdlib.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/string.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/math.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/pgmspace.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/binary.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/variants/mega/pins_arduino.h
 wiring_digital.o: \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring_digital.c \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring_private.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/io.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/sfr_defs.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/inttypes.h \
- /usr/lib/gcc/avr/4.6.2/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iom1280.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iomxx0_1.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/portpins.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/common.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/version.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/fuse.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/lock.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/interrupt.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay_basic.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdio.h \
- /usr/lib/gcc/avr/4.6.2/include/stdarg.h \
- /usr/lib/gcc/avr/4.6.2/include/stddef.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdlib.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/binary.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/pins_arduino.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/pgmspace.h
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/wiring_digital.c \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/wiring_private.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/io.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/sfr_defs.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/inttypes.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iom1280.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iomxx0_1.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/portpins.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/common.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/version.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/fuse.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/lock.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/interrupt.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdio.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdarg.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stddef.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/Arduino.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdlib.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/string.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/math.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/pgmspace.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/binary.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/variants/mega/pins_arduino.h
 wiring_pulse.o: \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring_pulse.c \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring_private.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/io.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/sfr_defs.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/inttypes.h \
- /usr/lib/gcc/avr/4.6.2/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iom1280.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iomxx0_1.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/portpins.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/common.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/version.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/fuse.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/lock.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/interrupt.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay_basic.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdio.h \
- /usr/lib/gcc/avr/4.6.2/include/stdarg.h \
- /usr/lib/gcc/avr/4.6.2/include/stddef.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdlib.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/binary.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/pins_arduino.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/pgmspace.h
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/wiring_pulse.c \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/wiring_private.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/io.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/sfr_defs.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/inttypes.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iom1280.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iomxx0_1.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/portpins.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/common.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/version.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/fuse.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/lock.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/interrupt.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdio.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdarg.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stddef.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/Arduino.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdlib.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/string.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/math.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/pgmspace.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/binary.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/variants/mega/pins_arduino.h
 wiring_shift.o: \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring_shift.c \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring_private.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/io.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/sfr_defs.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/inttypes.h \
- /usr/lib/gcc/avr/4.6.2/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iom1280.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iomxx0_1.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/portpins.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/common.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/version.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/fuse.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/lock.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/interrupt.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay_basic.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdio.h \
- /usr/lib/gcc/avr/4.6.2/include/stdarg.h \
- /usr/lib/gcc/avr/4.6.2/include/stddef.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdlib.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/binary.h
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/wiring_shift.c \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/wiring_private.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/io.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/sfr_defs.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/inttypes.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iom1280.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iomxx0_1.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/portpins.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/common.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/version.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/fuse.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/lock.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/interrupt.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdio.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdarg.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stddef.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/Arduino.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdlib.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/string.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/math.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/pgmspace.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/binary.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/variants/mega/pins_arduino.h
 WInterrupts.o: \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/WInterrupts.c \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/inttypes.h \
- /usr/lib/gcc/avr/4.6.2/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdint.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/io.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/sfr_defs.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iom1280.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/iomxx0_1.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/portpins.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/common.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/version.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/fuse.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/lock.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/interrupt.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/avr/pgmspace.h \
- /usr/lib/gcc/avr/4.6.2/include/stddef.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdio.h \
- /usr/lib/gcc/avr/4.6.2/include/stdarg.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/WConstants.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/stdlib.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/binary.h \
- /home/dwilkins/source/arduino/hardware/arduino/cores/arduino/wiring_private.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay.h \
- /usr/lib/gcc/avr/4.6.2/../../../../avr/include/util/delay_basic.h
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/WInterrupts.c \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/inttypes.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdint.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/io.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/sfr_defs.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iom1280.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/iomxx0_1.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/portpins.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/common.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/version.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/fuse.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/lock.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/interrupt.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/avr/pgmspace.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stddef.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdio.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stdarg.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/wiring_private.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/Arduino.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdlib.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/string.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/math.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/cores/arduino/binary.h \
+ /home/dwilkins/.avr/arduino/hardware/arduino/variants/mega/pins_arduino.h
+stringbuffer.o: utility/stringbuffer.c \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/stdlib.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/include/stddef.h \
+ /home/dwilkins/.avr/lib/gcc/avr/4.7.2/../../../../avr/include/string.h \
+ utility/stringbuffer.h

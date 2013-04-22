@@ -1,0 +1,13 @@
+print "dir forward"
+send "dir fwd\n"
+print "speed .50"
+send "speed .50\n"
+sleep 10 
+print "speed 1"
+send "speed 1\n"
+sleep 10
+print "dir rev ; speed 1"
+send "dir rev ; speed 1\n"
+sleep 15 
+print "stop"
+send "stop\n"
