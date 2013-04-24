@@ -19,13 +19,13 @@ extern "C" void __cxa_pure_virtual(void) {
 #define DRIVE_IN2 26
 #define DRIVE_INH 28
 #define DRIVE_PWM 2
-#define DRIVE_TRAIN_MAX_ADJUSTMENT 2
+#define DRIVE_TRAIN_MAX_ADJUSTMENT 5
 
 #define STEER_IN1 38
 #define STEER_IN2 40
 #define STEER_INH 42
 #define STEER_PWM 3
-#define STEER_MAX_ADJUSTMENT 2
+#define STEER_MAX_ADJUSTMENT 5
 
 #define STEER_COMMON_PIN 0
 #define STEER_COMMON_DIGITAL_PIN A0
@@ -34,23 +34,16 @@ extern "C" void __cxa_pure_virtual(void) {
 #define STEER_RIGHT_DIGITAL_PIN A2
 #define STEER_RIGHT_PIN 2
 
-#define STEER_MAX 153
-#define STEER_MIN 65
+#define STEER_MAX 350
+#define STEER_MIN 180
+#define STEERING_SHUTOFF_TIME 3000
+
 
 #define STEER_RIGHT_DRIFT 8
 #define STEER_LEFT_DRIFT 5
 
-
-
-// #define STEER_COMMON_PIN A2
-// #define STEER_LEFT_PIN 1
-// #define STEER_RIGHT_PIN 3
-
-
 #define RAMPS_PER_MS (255.0/5.0/1000.0)
 #define MS_BETWEEN_RAMPS (1.0/RAMPS_PER_MS)
-
-
 
 typedef enum {FORWARD,REVERSE,STOP, LEFT, RIGHT, CENTER} direction_t;
 aJsonStream serial_stream(&Serial);
@@ -94,6 +87,7 @@ int stop(int num_parameters, CrawlerCommand::parameter_t parameters[]);
 int dir(int num_parameters, CrawlerCommand::parameter_t parameters[]);
 int speed(int num_parameters, CrawlerCommand::parameter_t parameters[]);
 int turn(int num_parameters, CrawlerCommand::parameter_t parameters[]);
+int test(int num_parameters, CrawlerCommand::parameter_t parameters[]);
 
 void stop_motor(pwm_t *, direction_t stop_direction = STOP);
 void change_motor_direction(pwm_t *, const char *direction);
@@ -132,6 +126,7 @@ CrawlerCommand dir_cmd("dir",1,(int[]){CrawlerCommand::PT_STRING});
 CrawlerCommand speed_cmd("speed",1,(int []){CrawlerCommand::PT_FLOAT});
 // turn right .75;
 CrawlerCommand turn_cmd("turn",2,(int[]){CrawlerCommand::PT_STRING,CrawlerCommand::PT_FLOAT});
+CrawlerCommand test_cmd("test",0,NULL);
 
 
 void setup() {
@@ -139,10 +134,7 @@ void setup() {
 
   myPrintln("Startup...");
 
-//  pinMode(STEER_COMMON_DIGITAL_PIN,OUTPUT);
-//  digitalWrite(STEER_COMMON_DIGITAL_PIN,HIGH);
-
-  analogReference(INTERNAL2V56);
+  analogReference(INTERNAL1V1);
 
   pinMode(STEER_LEFT_PIN,OUTPUT);
   digitalWrite(STEER_LEFT_PIN,LOW);
@@ -153,11 +145,13 @@ void setup() {
   dir_cmd.set_command_function(&dir);
   speed_cmd.set_command_function(&speed);
   turn_cmd.set_command_function(&turn);
+  test_cmd.set_command_function(&test);
 
   commands[0] = &stop_cmd;
   commands[1] = &dir_cmd;
   commands[2] = &speed_cmd;
   commands[3] = &turn_cmd;
+  commands[4] = &test_cmd;
 
   sensors.max_measured = STEER_MAX;
   sensors.min_measured = STEER_MIN;
@@ -187,8 +181,8 @@ void setup() {
   steering.next_activity_time = 500;
   steering.pwm_max_adjustment = STEER_MAX_ADJUSTMENT;
   steering.next_pwm_adjustment = steering.pwm_max_adjustment;
-  steering.pwm_max = 70;
-  steering.pwm_min = 50;
+  steering.pwm_max = 40;
+  steering.pwm_min = 10;
   steering.inh_pin = STEER_INH;
   steering.in1_pin = STEER_IN1;
   steering.in2_pin = STEER_IN2;
@@ -208,22 +202,26 @@ void setup() {
 }
 
 void loop() {
+  int print_status = false;
   CrawlerCommand::command_buffer_t *cbp = NULL;
   if((cbp = CrawlerCommand::read_command())) {
     for(int i = 0;i < cbp->num_commands;i++) {
       myPrint("Got a command ---> ");
       myPrintln(cbp->command_strings[i]);
-      for(int cmd_num = 0;cmd_num < 4;  cmd_num++) {
+      for(int cmd_num = 0;cmd_num < MAX_COMMANDS;  cmd_num++) {
         if(commands[cmd_num]->is_match(cbp->command_strings[i])) {
           commands[cmd_num]->execute();
         }
       }
     }
-    json_status();
+    print_status = true;
   }
   process_sensors();
   process_pwm(&drive_train);
   process_pwm(&steering);
+  if(print_status) {
+    json_status();
+  }
   // process pwm
 }
 
@@ -242,22 +240,27 @@ void init_pwm(pwm_t *pwm) {
 }
 
 void forward(pwm_t *pwm) {
+  myPrintln("forward(...)");
   digitalWrite(pwm->in1_pin, HIGH);
   digitalWrite(pwm->in2_pin, LOW);
   digitalWrite(pwm->inh_pin, LOW);
 }
 
 void reverse(pwm_t *pwm) {
+  myPrintln("reverse(...)");
   digitalWrite(pwm->in1_pin, LOW);
   digitalWrite(pwm->in2_pin, HIGH);
   digitalWrite(pwm->inh_pin, LOW);
 }
 
 void brake(pwm_t *pwm) {
+  myPrintln("brake(...)");
+  pwm->current_pwm = pwm->target_pwm = pwm->target_direction_pwm =  0 ;
   analogWrite(pwm->pwm_pin,0);
   digitalWrite(pwm->in1_pin, HIGH);
   digitalWrite(pwm->in2_pin, HIGH);
   digitalWrite(pwm->inh_pin, HIGH);
+  analogWrite(pwm->pwm_pin,255);
 }
 
 void process_pwm(pwm_t *pwm) {
@@ -275,6 +278,8 @@ void process_pwm(pwm_t *pwm) {
         if(pwm->current_pwm > pwm->target_pwm) {pwm->current_pwm = pwm->target_pwm;}
         if(pwm->current_pwm && pwm->current_pwm <= pwm->pwm_min) {pwm->current_pwm = pwm->pwm_min;}
       }
+      myPrint("Writing pwm of ");
+      myPrintln(pwm->current_pwm,DEC);
       analogWrite(pwm->pwm_pin,pwm->current_pwm);
       pwm->next_activity_time = current_time + MS_BETWEEN_RAMPS;
     }
@@ -297,84 +302,64 @@ void process_pwm(pwm_t *pwm) {
     pwm->target_pwm = pwm->target_direction_pwm;
     pwm->next_activity_time = current_time;
   }
+
 }
 
 void process_sensors() {
   long current_time = millis();
   static long last_read = 0;
-  if(current_time >= sensors.shutoff_time) {
-    stop_motor(&steering);
+  if(sensors.shutoff_time && current_time >= sensors.shutoff_time &&
+     (steering.current_direction != STOP || steering.current_direction != CENTER)) {
+    myPrintln("stop caller 1");
+    sensors.shutoff_time = 0;
+    brake(&steering);
     steering.next_activity_time = current_time;
     global_sensor_resolution = 250;
   }
 
   if((current_time - last_read) > global_sensor_resolution) {
-/*
-//    digitalWrite(STEER_COMMON_PIN,HIGH);
-//    delay(20);
-    sensors.left_actual = analogRead(STEER_LEFT_PIN);
-    delay(20);
-    sensors.right_actual = analogRead(STEER_RIGHT_PIN);
-//    digitalWrite(STEER_COMMON_PIN,LOW);
-*/
     int sensor_val[2];
     int max_index = 0;
     int min_index = 1;
     long this_reading = 0;
+
     digitalWrite(STEER_LEFT_DIGITAL_PIN,HIGH);
     delay(2);
-    this_reading += analogRead(STEER_RIGHT_PIN);
-    delay(2);
-    this_reading += analogRead(STEER_RIGHT_PIN);
-    delay(2);
-    this_reading += analogRead(STEER_RIGHT_PIN);
-    delay(2);
-    this_reading += analogRead(STEER_RIGHT_PIN);
-    delay(2);
-    this_reading += analogRead(STEER_RIGHT_PIN);
-    delay(2);
-    this_reading += analogRead(STEER_RIGHT_PIN);
-    delay(2);
+    for(int i = 0; i < 6 ; i++) {
+      this_reading += analogRead(STEER_RIGHT_PIN);
+      delay(2);
+    }
     sensor_val[0] = (int)(this_reading / 6.0);
     digitalWrite(STEER_LEFT_DIGITAL_PIN,LOW);
     digitalWrite(STEER_RIGHT_DIGITAL_PIN,HIGH);
     delay(2);
     this_reading = 0;
-    this_reading += analogRead(STEER_LEFT_PIN);
-    delay(2);
-    this_reading += analogRead(STEER_LEFT_PIN);
-    delay(2);
-    this_reading += analogRead(STEER_LEFT_PIN);
-    delay(2);
-    this_reading += analogRead(STEER_LEFT_PIN);
-    delay(2);
-    this_reading += analogRead(STEER_LEFT_PIN);
-    delay(2);
-    this_reading += analogRead(STEER_LEFT_PIN);
-    delay(2);
+    for(int i = 0; i < 6 ; i++) {
+      this_reading += analogRead(STEER_LEFT_PIN);
+      delay(2);
+    }
     sensor_val[1] = (int)(this_reading / 6.0);
     digitalWrite(STEER_RIGHT_DIGITAL_PIN,LOW);
-
 
     max_index = sensor_val[0] > sensor_val[1] ? 0 : 1;
     min_index = 1 - max_index;
     sensors.actual = sensor_val[min_index];
-    sensors.max_measured = (sensor_val[max_index] > sensors.max_measured ? sensor_val[max_index] : sensors.max_measured);
-    sensors.min_measured = (sensor_val[min_index] < sensors.min_measured ? sensor_val[min_index] : sensors.min_measured);
-
-//    myPrint("sensors.actual - ");
-//    myPrintln(sensors.actual,DEC);
-
+    sensors.max_measured = (sensor_val[max_index] > sensors.max_measured ? sensors.max_measured + ((sensor_val[max_index] - sensors.max_measured)/2) : sensors.max_measured);
+    sensors.min_measured = (sensor_val[min_index] < sensors.min_measured ? sensors.min_measured - ((sensors.min_measured - sensor_val[min_index])/2) : sensors.min_measured);
 
     last_read = current_time;
   }
 
 if(
    ((sensors.actual >= sensors.target-STEER_RIGHT_DRIFT) && (steering.current_direction == RIGHT)) ||
+   ((sensors.actual > sensors.max_measured) && (steering.current_direction == RIGHT)) ||
+   ((sensors.actual < sensors.min_measured) && (steering.current_direction == LEFT)) ||
    ((sensors.actual <= sensors.target+STEER_LEFT_DRIFT) && (steering.current_direction == LEFT))
    ) {
-  stop_motor(&steering);
-  steering.next_activity_time = current_time;
+  myPrintln("stop caller 2");
+  brake(&steering);
+  sensors.shutoff_time = 0;
+  steering.current_direction = steering.target_direction = CENTER;
   global_sensor_resolution = 250;
  }
 }
@@ -384,11 +369,29 @@ if(
 
 int stop(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
   myPrintln("Stopping...");
+  myPrintln("stop caller 3");
   stop_motor(&drive_train);
+  return 0;
+}
+
+int test(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
+  myPrintln("Testing...");
+  sensors.shutoff_time = millis() + 10000;
+  sensors.target = 1000;
+  change_motor_direction(&steering,"right");
+  change_motor_speed(&steering,1);
+  steering.previous_direction = RIGHT;
+  global_sensor_resolution = 5;
+  steering.next_activity_time = millis();
+  process_sensors();
+  process_pwm(&steering);
  return 0;
 }
 
+
+
 void stop_motor(pwm_t *pwm,direction_t stop_direction) {
+  myPrintln("STOP MOTOR");
   if((pwm->target_direction != STOP && pwm->current_direction != STOP) ||
      (pwm->target_direction != CENTER && pwm->current_direction != CENTER)) {
     pwm->target_direction = stop_direction;
@@ -432,15 +435,18 @@ void change_motor_direction(pwm_t *pwm, const char *direction) {
   } else if (!strcasecmp(direction,"center")) {
     pwm->target_direction = CENTER;
   } else if (!strcasecmp(direction,"stop")) {
+    myPrint("*************************** Unknown Direction *************************** = ");
+    myPrintln(direction);
     pwm->target_direction = STOP;
   } else {
     myPrint("Invalid Direction - ");
     myPrintln(direction);
+    return;
   }
   pwm->next_activity_time = millis();
-//  if(pwm->target_direction != pwm->current_direction) {
+  if(pwm->target_direction != pwm->current_direction) {
     pwm->target_pwm = pwm->target_direction_pwm = 0;
-//  }
+  }
   myPrint("Current Direction - ");
   myPrintln(pwm->current_direction,DEC);
   myPrint("Current Target Direction - ");
@@ -457,7 +463,7 @@ int speed(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
     myPrint(speed,4);
     myPrint(" - pwm will be ");
     myPrintln(ceil((255 * speed)),DEC);
-    if (speed >= 0.0 || speed <= 1.0) {
+   if (speed >= 0.0 && speed <= 1.0) {
       change_motor_speed(&drive_train,speed);
     }
   } else {
@@ -468,8 +474,12 @@ int speed(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
 }
 
 void change_motor_speed(pwm_t *pwm, float speed) {
+  myPrintln("change_motor_speed");
   int new_pwm = ceil((255 * speed));
   if(new_pwm < pwm->pwm_min) {
+    myPrint("Speed too low (");
+    myPrint(new_pwm);
+    myPrintln(") skipping...");
     new_pwm = 0;
   } else if(new_pwm > pwm->pwm_max) {
     new_pwm = pwm->pwm_max;
@@ -503,6 +513,10 @@ int turn(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
     int right_position;
     direction = parameters[0].val.s;
     percentage = parameters[1].val.f;
+    if (percentage > 1.0 || percentage < 0.0) {
+      return 0;
+    }
+
     distance_from_center = percentage * (steering_range / 2);
     left_position  = steering_center - distance_from_center;
     right_position = steering_center + distance_from_center;
@@ -513,24 +527,29 @@ int turn(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
     myPrint("right_position"); myPrintln(right_position,DEC);
 
     if(!strcasecmp(direction,"left")) {
-      sensors.shutoff_time = current_time + 1000;
       sensors.target = left_position;
     } else if (!strcasecmp(direction,"right")) {
-      sensors.shutoff_time = current_time + 1000;
       sensors.target = right_position;
     } else if (!strcasecmp(direction,"center")) {
-      sensors.shutoff_time = current_time + 1000;
       sensors.target = steering_center;
-    }
-    if(sensors.target < sensors.actual) {
-      change_motor_direction(&steering,"left");
-      steering.previous_direction = LEFT;
     } else {
+      myPrint("************** invalid direction ***************************");
+      myPrintln(direction);
+      return 0;
+    }
+    sensors.shutoff_time = current_time + STEERING_SHUTOFF_TIME;
+    if((sensors.target+STEER_RIGHT_DRIFT) < sensors.actual) {
+      change_motor_direction(&steering,"left");
+      myPrint("MOVING LEFT "); myPrintln(sensors.target,DEC);
+    } else if ((sensors.target-STEER_RIGHT_DRIFT) > sensors.actual) {
       change_motor_direction(&steering,"right");
-      steering.previous_direction = RIGHT;
+      myPrint("MOVING RIGHT "); myPrintln(sensors.target,DEC);
+    } else {
+      return 0;
+      myPrint("MOVING CENTER - NOTHING TO DO "); myPrintln(sensors.target,DEC);
     }
     global_sensor_resolution = 1;
-    change_motor_speed(&steering,.4);
+    change_motor_speed(&steering,1);
     steering.next_activity_time = current_time;
     process_sensors();
     process_pwm(&steering);

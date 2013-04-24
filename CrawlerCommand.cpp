@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include "main.h"
 
+
 CrawlerCommand::CrawlerCommand(const char *command,
                                int num_parameters,
                                int parameter_types[]) {
