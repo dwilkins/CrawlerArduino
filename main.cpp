@@ -181,7 +181,7 @@ void setup() {
   steering.next_activity_time = 500;
   steering.pwm_max_adjustment = STEER_MAX_ADJUSTMENT;
   steering.next_pwm_adjustment = steering.pwm_max_adjustment;
-  steering.pwm_max = 40;
+  steering.pwm_max = 65;
   steering.pwm_min = 10;
   steering.inh_pin = STEER_INH;
   steering.in1_pin = STEER_IN1;
