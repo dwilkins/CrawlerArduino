@@ -25,7 +25,7 @@ extern "C" void __cxa_pure_virtual(void) {
 #define STEER_IN2 40
 #define STEER_INH 42
 #define STEER_PWM 3
-#define STEER_MAX_ADJUSTMENT 5
+#define STEER_MAX_ADJUSTMENT 2
 
 #define STEER_COMMON_PIN 0
 #define STEER_COMMON_DIGITAL_PIN A0
@@ -88,14 +88,15 @@ int dir(int num_parameters, CrawlerCommand::parameter_t parameters[]);
 int speed(int num_parameters, CrawlerCommand::parameter_t parameters[]);
 int turn(int num_parameters, CrawlerCommand::parameter_t parameters[]);
 int test(int num_parameters, CrawlerCommand::parameter_t parameters[]);
+int delay(int num_parameters, CrawlerCommand::parameter_t parameters[]);
 
 void stop_motor(pwm_t *, direction_t stop_direction = STOP);
 void change_motor_direction(pwm_t *, const char *direction);
 void change_motor_speed(pwm_t *, float speed);
 
 
-void process_pwm(pwm_t *);
-void process_sensors();
+int process_pwm(pwm_t *);
+int process_sensors();
 
 void init_pwm(pwm_t *pwm);
 void forward(pwm_t *pwm);
@@ -114,7 +115,7 @@ int global_sensor_resolution = 250;
 #define PWMDELAY 50
 #define PWMPIN 6
 
-#define MAX_COMMANDS 5
+#define MAX_COMMANDS 6
 
 CrawlerCommand *commands[MAX_COMMANDS] = {NULL};
 
@@ -127,6 +128,7 @@ CrawlerCommand speed_cmd("speed",1,(int []){CrawlerCommand::PT_FLOAT});
 // turn right .75;
 CrawlerCommand turn_cmd("turn",2,(int[]){CrawlerCommand::PT_STRING,CrawlerCommand::PT_FLOAT});
 CrawlerCommand test_cmd("test",0,NULL);
+// CrawlerCommand delay_cmd("delay",1,CrawlerCommand::PT_FLOAT);
 
 
 void setup() {
@@ -152,6 +154,7 @@ void setup() {
   commands[2] = &speed_cmd;
   commands[3] = &turn_cmd;
   commands[4] = &test_cmd;
+//  commands[4] = &delay_cmd;
 
   sensors.max_measured = STEER_MAX;
   sensors.min_measured = STEER_MIN;
@@ -181,8 +184,8 @@ void setup() {
   steering.next_activity_time = 500;
   steering.pwm_max_adjustment = STEER_MAX_ADJUSTMENT;
   steering.next_pwm_adjustment = steering.pwm_max_adjustment;
-  steering.pwm_max = 65;
-  steering.pwm_min = 10;
+  steering.pwm_max = 120;
+  steering.pwm_min = 110;
   steering.inh_pin = STEER_INH;
   steering.in1_pin = STEER_IN1;
   steering.in2_pin = STEER_IN2;
@@ -200,9 +203,11 @@ void setup() {
   json_status();
 
 }
-
+int old_distance_from_target = 0;
 void loop() {
   int print_status = false;
+  int current_steering_pwm;
+  int distance_from_target;
   CrawlerCommand::command_buffer_t *cbp = NULL;
   if((cbp = CrawlerCommand::read_command())) {
     for(int i = 0;i < cbp->num_commands;i++) {
@@ -216,9 +221,14 @@ void loop() {
     }
     print_status = true;
   }
-  process_sensors();
+  distance_from_target = process_sensors();
+  if(distance_from_target != old_distance_from_target) {
+    myPrint("Distance From Target");
+    myPrintln(distance_from_target,DEC);
+  }
+  old_distance_from_target = distance_from_target;
   process_pwm(&drive_train);
-  process_pwm(&steering);
+  current_steering_pwm = process_pwm(&steering);
   if(print_status) {
     json_status();
   }
@@ -263,7 +273,7 @@ void brake(pwm_t *pwm) {
   analogWrite(pwm->pwm_pin,255);
 }
 
-void process_pwm(pwm_t *pwm) {
+int process_pwm(pwm_t *pwm) {
   long current_time = millis();
   static long last_time = 0;
   if(current_time >= pwm->next_activity_time && pwm->next_activity_time > 0) {
@@ -302,11 +312,12 @@ void process_pwm(pwm_t *pwm) {
     pwm->target_pwm = pwm->target_direction_pwm;
     pwm->next_activity_time = current_time;
   }
-
+  return pwm->current_pwm;
 }
 
-void process_sensors() {
+int process_sensors() {
   long current_time = millis();
+  int distance_from_target, drift;
   static long last_read = 0;
   if(sensors.shutoff_time && current_time >= sensors.shutoff_time &&
      (steering.current_direction != STOP || steering.current_direction != CENTER)) {
@@ -350,18 +361,24 @@ void process_sensors() {
     last_read = current_time;
   }
 
-if(
-   ((sensors.actual >= sensors.target-STEER_RIGHT_DRIFT) && (steering.current_direction == RIGHT)) ||
-   ((sensors.actual > sensors.max_measured) && (steering.current_direction == RIGHT)) ||
-   ((sensors.actual < sensors.min_measured) && (steering.current_direction == LEFT)) ||
-   ((sensors.actual <= sensors.target+STEER_LEFT_DRIFT) && (steering.current_direction == LEFT))
-   ) {
-  myPrintln("stop caller 2");
-  brake(&steering);
-  sensors.shutoff_time = 0;
-  steering.current_direction = steering.target_direction = CENTER;
-  global_sensor_resolution = 250;
- }
+  if(steering.current_direction == RIGHT) {
+    distance_from_target = sensors.target - sensors.actual;
+    drift = STEER_RIGHT_DRIFT;
+  }
+
+  if(steering.current_direction == LEFT) {
+    distance_from_target = sensors.actual - sensors.target;
+    drift = STEER_LEFT_DRIFT;
+  }
+
+  if(abs(distance_from_target) < drift && steering.current_pwm) {
+    myPrintln("stop caller 2");
+    brake(&steering);
+    sensors.shutoff_time = 0;
+    steering.current_direction = steering.target_direction = CENTER;
+    global_sensor_resolution = 250;
+  }
+  return distance_from_target;
 }
 
 
@@ -385,6 +402,11 @@ int test(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
   steering.next_activity_time = millis();
   process_sensors();
   process_pwm(&steering);
+ return 0;
+}
+
+
+int delay(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
  return 0;
 }
 

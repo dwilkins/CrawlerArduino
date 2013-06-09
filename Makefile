@@ -154,7 +154,7 @@ sym: applet/$(TARGET).sym
 upload: applet/$(TARGET).hex
 #	stty $(UPLOAD_RATE) -F $(PORT) raw ignbrk hupcl
 	$(AVRDUDE) $(AVRDUDE_FLAGS) $(AVRDUDE_WRITE_FLASH)
-	minicom
+#	minicom
 #	(stty 115200 raw ; cat -) < $(PORT)
 
 
