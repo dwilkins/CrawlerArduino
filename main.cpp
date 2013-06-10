@@ -19,12 +19,14 @@ extern "C" void __cxa_pure_virtual(void) {
 #define DRIVE_IN2 26
 #define DRIVE_INH 28
 #define DRIVE_PWM 2
-#define DRIVE_TRAIN_MAX_ADJUSTMENT 5
+#define DRIVE_TRAIN_MAX_ADJUSTMENT 2
 
 #define STEER_IN1 38
 #define STEER_IN2 40
 #define STEER_INH 42
 #define STEER_PWM 3
+#define STEERING_MAX_MAX_PWM 160
+#define STEERING_MIN_MIN_PWM 60
 #define STEER_MAX_ADJUSTMENT 2
 
 #define STEER_COMMON_PIN 0
@@ -36,7 +38,7 @@ extern "C" void __cxa_pure_virtual(void) {
 
 #define STEER_MAX 350
 #define STEER_MIN 180
-#define STEERING_SHUTOFF_TIME 3000
+#define STEERING_SHUTOFF_TIME 2000
 
 
 #define STEER_RIGHT_DRIFT 8
@@ -65,6 +67,7 @@ struct pwm_t {
   long pwm_max_adjustment;
   long pwm_min;
   long pwm_max;
+  bool brake;
   int inh_pin;
   int in1_pin;
   int in2_pin;
@@ -77,7 +80,10 @@ struct sensors_t {
   int max_measured;
   int min_measured;
   int target;
+  int distance;
   long shutoff_time;
+  bool take_measurement;
+  direction_t measurement_direction;
 };
 
 
@@ -169,7 +175,7 @@ void setup() {
   drive_train.next_pwm_adjustment = 0;
   drive_train.pwm_max_adjustment = DRIVE_TRAIN_MAX_ADJUSTMENT;
   drive_train.next_pwm_adjustment = drive_train.pwm_max_adjustment;
-  drive_train.pwm_min = 55;
+  drive_train.pwm_min = 75;
   drive_train.pwm_max = 255;
   drive_train.inh_pin = DRIVE_INH;
   drive_train.in1_pin = DRIVE_IN1;
@@ -184,8 +190,8 @@ void setup() {
   steering.next_activity_time = 500;
   steering.pwm_max_adjustment = STEER_MAX_ADJUSTMENT;
   steering.next_pwm_adjustment = steering.pwm_max_adjustment;
-  steering.pwm_max = 120;
-  steering.pwm_min = 110;
+  steering.pwm_max = 150;
+  steering.pwm_min = 90;
   steering.inh_pin = STEER_INH;
   steering.in1_pin = STEER_IN1;
   steering.in2_pin = STEER_IN2;
@@ -222,7 +228,8 @@ void loop() {
     print_status = true;
   }
   distance_from_target = process_sensors();
-  if(distance_from_target != old_distance_from_target) {
+  if(distance_from_target > (old_distance_from_target + 3) &&
+     distance_from_target < (old_distance_from_target - 3)) {
     myPrint("Distance From Target");
     myPrintln(distance_from_target,DEC);
   }
@@ -251,6 +258,10 @@ void init_pwm(pwm_t *pwm) {
 
 void forward(pwm_t *pwm) {
   myPrintln("forward(...)");
+  if(pwm->brake) {
+    analogWrite(pwm->pwm_pin,0);
+    pwm->brake = false;
+  }
   digitalWrite(pwm->in1_pin, HIGH);
   digitalWrite(pwm->in2_pin, LOW);
   digitalWrite(pwm->inh_pin, LOW);
@@ -258,6 +269,10 @@ void forward(pwm_t *pwm) {
 
 void reverse(pwm_t *pwm) {
   myPrintln("reverse(...)");
+  if(pwm->brake) {
+    analogWrite(pwm->pwm_pin,0);
+    pwm->brake = false;
+  }
   digitalWrite(pwm->in1_pin, LOW);
   digitalWrite(pwm->in2_pin, HIGH);
   digitalWrite(pwm->inh_pin, LOW);
@@ -267,10 +282,11 @@ void brake(pwm_t *pwm) {
   myPrintln("brake(...)");
   pwm->current_pwm = pwm->target_pwm = pwm->target_direction_pwm =  0 ;
   analogWrite(pwm->pwm_pin,0);
-  digitalWrite(pwm->in1_pin, HIGH);
+/*  digitalWrite(pwm->in1_pin, HIGH);
   digitalWrite(pwm->in2_pin, HIGH);
   digitalWrite(pwm->inh_pin, HIGH);
-  analogWrite(pwm->pwm_pin,255);
+  analogWrite(pwm->pwm_pin,255); */
+  pwm->brake = true;
 }
 
 int process_pwm(pwm_t *pwm) {
@@ -288,6 +304,7 @@ int process_pwm(pwm_t *pwm) {
         if(pwm->current_pwm > pwm->target_pwm) {pwm->current_pwm = pwm->target_pwm;}
         if(pwm->current_pwm && pwm->current_pwm <= pwm->pwm_min) {pwm->current_pwm = pwm->pwm_min;}
       }
+      myPrint( pwm == &steering ? "Steering: " : "Drive Train: ");
       myPrint("Writing pwm of ");
       myPrintln(pwm->current_pwm,DEC);
       analogWrite(pwm->pwm_pin,pwm->current_pwm);
@@ -323,6 +340,10 @@ int process_sensors() {
      (steering.current_direction != STOP || steering.current_direction != CENTER)) {
     myPrintln("stop caller 1");
     sensors.shutoff_time = 0;
+    // if(steering.pwm_max < STEERING_MAX_MAX_PWM) {
+    //   steering.pwm_max++;
+    //   steering.pwm_min++;
+    // }
     brake(&steering);
     steering.next_activity_time = current_time;
     global_sensor_resolution = 250;
@@ -361,22 +382,43 @@ int process_sensors() {
     last_read = current_time;
   }
 
-  if(steering.current_direction == RIGHT) {
-    distance_from_target = sensors.target - sensors.actual;
+  if(sensors.measurement_direction == RIGHT) {
+    distance_from_target = sensors.actual - sensors.target;
     drift = STEER_RIGHT_DRIFT;
   }
 
-  if(steering.current_direction == LEFT) {
-    distance_from_target = sensors.actual - sensors.target;
+  if(sensors.measurement_direction == LEFT) {
+    distance_from_target = sensors.target - sensors.actual;
     drift = STEER_LEFT_DRIFT;
   }
 
-  if(abs(distance_from_target) < drift && steering.current_pwm) {
+  if(abs(distance_from_target) < (drift * 5) && steering.target_pwm) {
+    myPrintln("Slow it down...");
+    change_motor_speed(&steering, 0);
+  } else if(abs(distance_from_target) < (drift * 2) &&  steering.target_pwm) {
     myPrintln("stop caller 2");
     brake(&steering);
     sensors.shutoff_time = 0;
     steering.current_direction = steering.target_direction = CENTER;
     global_sensor_resolution = 250;
+  } else if(sensors.take_measurement && !steering.current_pwm && !steering.target_pwm) {
+    int num_drifts = floor((float)(abs(distance_from_target)) / ((float)drift));
+    myPrint("Distance from Target is ...");
+    myPrintln(distance_from_target,DEC);
+    myPrint("Num Drifts are...");
+    myPrintln(num_drifts,DEC);
+    if(num_drifts && distance_from_target > 0 && steering.pwm_min > STEERING_MIN_MIN_PWM) {
+      myPrintln("Reducing pwm...");
+      steering.pwm_max -= steering.pwm_max_adjustment;
+      steering.pwm_min -= steering.pwm_max_adjustment;
+    } else if(num_drifts && distance_from_target < 0 && steering.pwm_max < STEERING_MAX_MAX_PWM) {
+      myPrintln("Increasing pwm...");
+      steering.pwm_max += steering.pwm_max_adjustment;
+      steering.pwm_min += steering.pwm_max_adjustment;
+    }
+    if(steering.pwm_max > STEERING_MAX_MAX_PWM) {steering.pwm_max = STEERING_MAX_MAX_PWM;}
+    if(steering.pwm_min < STEERING_MIN_MIN_PWM) {steering.pwm_min = STEERING_MIN_MIN_PWM;}
+    sensors.take_measurement = false;
   }
   return distance_from_target;
 }
@@ -497,11 +539,18 @@ int speed(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
 
 void change_motor_speed(pwm_t *pwm, float speed) {
   myPrintln("change_motor_speed");
-  int new_pwm = ceil((255 * speed));
+/*  int new_pwm = ceil((255 * speed)); */
+  int new_pwm = ceil((pwm->pwm_max - pwm->pwm_min) * speed);
+  myPrint("new_pwm is - ");
+  myPrintln(new_pwm);
+  new_pwm = (speed > 0.0 ? (new_pwm + pwm->pwm_min) : 0);
+  myPrint("new_pwm is - ");
+  myPrintln(new_pwm);
+
   if(new_pwm < pwm->pwm_min) {
-    myPrint("Speed too low (");
+    myPrint("Speed lower than min pwm (");
     myPrint(new_pwm);
-    myPrintln(") skipping...");
+    myPrintln(") setting to 0 ");
     new_pwm = 0;
   } else if(new_pwm > pwm->pwm_max) {
     new_pwm = pwm->pwm_max;
@@ -520,12 +569,13 @@ void change_motor_speed(pwm_t *pwm, float speed) {
 }
 
 
-
+/* Lower numbers to left */
 
 int turn(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
   myPrintln("Turning");
   char *direction;
   float percentage;
+  float percentage_of_total_distance;
   int steering_range = sensors.max_measured - sensors.min_measured;
   int steering_center = sensors.min_measured + (int)(steering_range / 2.0);
   long current_time = millis();
@@ -538,6 +588,7 @@ int turn(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
     if (percentage > 1.0 || percentage < 0.0) {
       return 0;
     }
+
 
     distance_from_center = percentage * (steering_range / 2);
     left_position  = steering_center - distance_from_center;
@@ -559,22 +610,39 @@ int turn(int num_parameters, CrawlerCommand::parameter_t parameters[]) {
       myPrintln(direction);
       return 0;
     }
-    sensors.shutoff_time = current_time + STEERING_SHUTOFF_TIME;
-    if((sensors.target+STEER_RIGHT_DRIFT) < sensors.actual) {
+    if(sensors.actual < sensors.target) {
+      sensors.distance = sensors.target - sensors.actual;
+    } else {
+      sensors.distance = sensors.actual - sensors.target;
+    }
+
+
+    if((sensors.target+STEER_LEFT_DRIFT) < sensors.actual) {
       change_motor_direction(&steering,"left");
+      sensors.measurement_direction = LEFT;
       myPrint("MOVING LEFT "); myPrintln(sensors.target,DEC);
     } else if ((sensors.target-STEER_RIGHT_DRIFT) > sensors.actual) {
       change_motor_direction(&steering,"right");
       myPrint("MOVING RIGHT "); myPrintln(sensors.target,DEC);
+      sensors.measurement_direction = RIGHT;
     } else {
       return 0;
       myPrint("MOVING CENTER - NOTHING TO DO "); myPrintln(sensors.target,DEC);
     }
+
+    if(percentage < 0.9) {
+      sensors.take_measurement = true;
+    }
+
     global_sensor_resolution = 1;
-    change_motor_speed(&steering,1);
+    myPrint("Speed will be ");
+    percentage_of_total_distance = (float)((float)sensors.distance / (float)(sensors.max_measured - sensors.min_measured));
+    myPrintln(percentage_of_total_distance);
+    change_motor_speed(&steering,percentage_of_total_distance);
+    sensors.shutoff_time = current_time + ceil((float)STEERING_SHUTOFF_TIME * percentage_of_total_distance);
     steering.next_activity_time = current_time;
-    process_sensors();
-    process_pwm(&steering);
+/*    process_sensors();
+    process_pwm(&steering); */
   } else {
     myPrint("turn - Not enough parameters = ");
     myPrintln(num_parameters,DEC);
@@ -614,6 +682,8 @@ void json_status() {
  for(i = 0; i < 2 ; i++) {
    aJson.addNumberToObject(json_pwms[i],"current_pwm",pwms[i]->current_pwm);
    aJson.addNumberToObject(json_pwms[i],"target_pwm",pwms[i]->target_pwm);
+   aJson.addNumberToObject(json_pwms[i],"pwm_min",(int)pwms[i]->pwm_min);
+   aJson.addNumberToObject(json_pwms[i],"pwm_max",(int)pwms[i]->pwm_max);
    aJson.addNumberToObject(json_pwms[i],"current_direction",pwms[i]->current_direction);
    aJson.addNumberToObject(json_pwms[i],"target_direction",pwms[i]->target_direction);
    aJson.addNumberToObject(json_pwms[i],"last_command_time",(double)pwms[i]->last_command_time);
